@@ -1,0 +1,63 @@
+---
+title: "R Notebook"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(e1071)
+library(caret)
+library(tm)
+library(wordcloud)
+library(ggplot2)
+```
+
+```{r}
+data <- read.csv("/home/handiism/Developments/R/ds/world-cup-qatar.csv")
+```
+
+```{r}
+wordcloud(data$tweet, max.words = 100, colors = colors())
+```
+
+```{r}
+proportion <- as.numeric(prop.table(table(data$sentiment)))
+sentiment <- c("Negative", "Neutral", "Positive")
+pie(proportion, sentiment, main = "Sentiment Pie Chart", col = rainbow(length(proportion)))
+
+```
+
+```{r}
+dtm <- DocumentTermMatrix(data$tweet)
+dtm <- removeSparseTerms(dtm, 0.999)
+
+```
+
+```{r}
+convert <- function(x) {
+  y <- ifelse(x > 0, 1, 0)
+  y <- factor(y, levels = c(0, 1), labels = c("No", "Yes"))
+  y
+}
+
+dataNaive <- apply(dtm, 2, convert)
+
+dataset <- as.data.frame(as.matrix(dataNaive))
+dataset$sentiment <- as.factor(data$sentiment)
+```
+
+```{r}
+set.seed(100)
+split <- sample(2, nrow(dataset), prob = c(0.75, 0.25), replace = TRUE)
+train <- dataset[split == 1,]
+test <- dataset[split == 2,]
+```
+
+```{r}
+control <- trainControl(method = "repeatedcv", number = 10, repeats = 2)
+classifier <- naiveBayes(train, train$sentiment, laplace = 1, trControl = control, tuneLength = 7)
+```
+
+```{r}
+prediction <- predict(classifier, type = 'class', newdata = test)
+confusionMatrix(prediction, test$sentiment)
+```

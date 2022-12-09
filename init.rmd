@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output: html_document
+---
+# Library
+```{r}
+library(twitteR) # scrapping
+library(tm) # corpus
+library(stringi) # remove empty string
+library(stringr) # string split
+```
+# Setup twitter auth
+```{r}
+consumer_key <- "YTkbdeL6EymZy1HJp6tiPxUEr"
+consumer_secret <- "0VoTq25uP4DTjnzKNaBhxcCoaSbdvAlfqsviZjd50iCinRj5C4"
+bearer_token <- "AAAAAAAAAAAAAAAAAAAAAD9UjAEAAAAA8m3PgMs24tRhYCuJ0hQaQ5R2moI%3DThYb3MRjCOlrHidGcDbn4ZDdOG0NtwbeZuY3IDFk0ay8Vdpla5"
+access_token <- "1437206819936501760-zvrXApLJ4MRUDd5zwSDmKXYFTbJ7eV"
+access_token_secret <- "0n6bGTCeEQUYDnwaImK0Big8ZhIMtIxwF2IYvXiRPiV20"
+setup_twitter_oauth(consumer_key, consumer_secret, access_token, access_token_secret)
+```
+# Scraping
+```{r}
+
+# begin scrapping a topic
+tweetsList <- searchTwitter('world cup qatar', n = 8000, retryOnRateLimit = 10e5, lang = "en")
+# convert from twList to data frame
+tweets <- twListToDF(twList = tweetsList)
+```
+
+# Data Preparation
+```{r}
+# remove spam tweets
+uniqueText <- unique(tweets$text)
+
+# remove retweet element
+removeRetweet <- function(x) gsub("RT @\\w+: ", "", x)
+cleanText <- lapply(uniqueText, removeRetweet)
+
+#remove mentione element
+removeMention <- function(x) gsub("@\\w+", "", x)
+cleanText <- lapply(cleanText, removeMention)
+
+# remove url element
+removeURL <- function(x) gsub("http\\S+", "", x)
+cleanText <- lapply(cleanText, removeURL)
+
+# remove hastag element
+removeHashtag <- function(x) gsub("#\\S+", "", x)
+cleanText <- lapply(cleanText, removeHashtag)
+
+# remove new line character
+removeNewLine <- function(x) gsub("\n", " ", x)
+cleanText <- lapply(cleanText, removeNewLine)
+
+# remove nonalphabetical character
+removeNonAlphabet <- function(x) gsub("[^A-Za-z ]", "", x)
+cleanText <- lapply(cleanText, removeNonAlphabet)
+
+# text to lowecase
+cleanText <- lapply(cleanText, tolower)
+
+# remove stop words
+cleanText <- lapply(cleanText, removeWords, stopwords("english"))
+
+# remove key
+removeWorld <- function(x) gsub("world cup qatar", "", x)
+cleanText <- lapply(cleanText, removeWorld)
+
+# change multiple space to one
+changeMultipleSpace <- function(x) gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", x, perl = TRUE)
+cleanText <- lapply(cleanText, changeMultipleSpace)
+
+# remove empty string
+cleanText <- as.character(stri_remove_empty(cleanText, na_empty = FALSE))
+```
+
+# Labeling
+
+```{r}
+positiveWords <- scan("/home/handiism/Developments/R/ds/pos-words.txt", what = "character", comment.char = ";")
+negativeWords <- scan("/home/handiism/Developments/R/ds/neg-words.txt", what = "character", comment.char = ";")
+
+scores <- lapply(cleanText, function(cleanText) {
+  words <- unlist(str_split(cleanText, pattern = "\\s+"))
+  positiveMatches <- !is.na(match(words, positiveWords))
+  negativeMatches <- !is.na(match(words, negativeWords))
+  score <- sum(positiveMatches) - sum(negativeMatches)
+  score
+})
+
+sentiment <- as.factor(ifelse(scores < 0, "negative", ifelse(scores == 0, "neutral", "positive")))
+```
+# Build csv
+```{r}
+dataframe <- data.frame(tweet = unlist(cleanText), sentiment = sentiment)
+write.csv(dataframe, "/home/handiism/Developments/R/ds/world-cup-qatar.csv")
+```
